@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BoardNerd</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --ring: rgba(11,11,11,0.10);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --hole: #c3c2b7;
+  --accent: #2a78d6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --ring: rgba(255,255,255,0.10);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --hole: #4a4a46;
+    --accent: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --ring: rgba(255,255,255,0.10);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --hole: #4a4a46;
+  --accent: #3987e5;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+header, main, footer { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+header { padding-top: 32px; }
+h1 { margin: 0 0 4px; font-size: 28px; }
+h2 { margin: 0 0 4px; font-size: 18px; }
+p { margin: 0 0 12px; color: var(--ink-2); }
+.sub { color: var(--muted); font-size: 13px; }
+a { color: var(--accent); }
+.filters {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+  padding: 12px 0; margin-bottom: 8px; background: var(--page);
+}
+select, button {
+  font: inherit; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--ring); border-radius: 8px; padding: 6px 10px;
+}
+.seg { display: inline-flex; border: 1px solid var(--ring); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 5px 12px; color: var(--ink-2); background: var(--surface); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.card {
+  background: var(--surface); border: 1px solid var(--ring); border-radius: 12px;
+  padding: 20px; margin-bottom: 20px; min-width: 0;
+}
+.card-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 20px; }
+.grid2 > .card { margin-bottom: 0; }
+.grid2 + .card, .grid2 + .grid2 { margin-top: 20px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.tile { background: var(--surface); border: 1px solid var(--ring); border-radius: 12px; padding: 14px 16px; }
+.tile .v { font-size: 26px; font-weight: 600; }
+.tile .k { color: var(--muted); font-size: 13px; }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg text { fill: var(--muted); font: 11px system-ui, -apple-system, "Segoe UI", sans-serif; }
+.legend { display: flex; gap: 16px; font-size: 13px; color: var(--ink-2); margin-bottom: 4px; }
+.legend i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 4px 8px; text-align: left; border-bottom: 1px solid var(--grid); }
+th { color: var(--muted); font-weight: 500; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+.rank td:first-child { color: var(--muted); width: 2.5em; }
+.barcell { position: relative; }
+.barcell span { position: relative; }
+.barcell::before {
+  content: ""; position: absolute; left: 0; top: 4px; bottom: 4px;
+  width: var(--w); background: var(--series-1); opacity: 0.18; border-radius: 0 4px 4px 0;
+}
+details { margin-top: 10px; }
+summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
+.scroll { overflow-x: auto; }
+.heat { border-collapse: separate; border-spacing: 2px; font-size: 11px; }
+.heat th, .heat td { border: 0; padding: 3px 4px; text-align: center; white-space: nowrap; }
+.heat th { position: sticky; left: 0; background: var(--surface); text-align: right; }
+.heat td { border-radius: 3px; min-width: 40px; font-variant-numeric: tabular-nums; }
+.ctrl { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-bottom: 12px; }
+.ctrl label { color: var(--ink-2); font-size: 13px; display: inline-flex; gap: 6px; align-items: center; }
+.board-wrap { max-width: 640px; margin: 0 auto; }
+.scale { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); max-width: 320px; margin: 8px auto 0; }
+.scale .bar { flex: 1; height: 8px; border-radius: 4px; }
+.plot3d { width: 100%; height: min(70vh, 600px); min-height: 360px; }
+.plot3d .msg { padding: 24px; text-align: center; color: var(--muted); }
+#tip {
+  position: fixed; pointer-events: none; z-index: 10; display: none;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--ring);
+  border-radius: 8px; padding: 6px 10px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  max-width: 260px;
+}
+#tip b { font-weight: 600; }
+footer { padding-bottom: 40px; color: var(--muted); font-size: 13px; }
+@media (max-width: 600px) {
+  .card { padding: 14px; }
+  h1 { font-size: 22px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>BoardNerd</h1>
+  <p class="sub" id="snapshot"></p>
+</header>
+<main>
+  <div class="filters">
+    <label class="sub">Board <select id="product"></select></label>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <section class="card">
+    <div class="card-head"><div><h2>Boulder count over time</h2>
+      <p>Cumulative number of boulders set on this board. Unlisted and draft boulders are only in the first line.</p></div></div>
+    <div id="growth"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Top setters</h2><p>Boulders set per user, all boulders on this board.</p>
+      <div id="setters"></div>
+    </section>
+    <section class="card">
+      <h2>Top beta video uploaders</h2><p>Beta videos linked to boulders on this board.</p>
+      <div id="uploaders"></div>
+    </section>
+  </div>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Most common words in boulder names</h2><p>Lower-cased, emojis removed.</p>
+      <div id="words"></div>
+    </section>
+    <section class="card">
+      <h2>Most common emojis in boulder names</h2><p>Each emoji counted every time it appears.</p>
+      <div id="emojis"></div>
+    </section>
+  </div>
+
+  <div class="grid2">
+    <section class="card">
+      <div class="card-head"><div><h2>Boulders by grade</h2>
+        <p>A boulder is counted once for each angle it has at least one ascent at.</p></div>
+        <div class="seg" data-toggle="pct" data-target="gradeClimbs"></div></div>
+      <div id="gradeClimbs"></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><div><h2>Boulders by board angle</h2>
+        <p>Boulders with at least one ascent at each angle.</p></div>
+        <div class="seg" data-toggle="pct" data-target="angleClimbs"></div></div>
+      <div id="angleClimbs"></div>
+    </section>
+  </div>
+
+  <div class="grid2">
+    <section class="card">
+      <div class="card-head"><div><h2>Ascents by grade</h2>
+        <p>Logged ascents, summed over every boulder and angle.</p></div>
+        <div class="seg" data-toggle="pct" data-target="gradeAscents"></div></div>
+      <div id="gradeAscents"></div>
+    </section>
+    <section class="card">
+      <div class="card-head"><div><h2>Ascents by board angle</h2>
+        <p>Where people actually climb.</p></div>
+        <div class="seg" data-toggle="pct" data-target="angleAscents"></div></div>
+      <div id="angleAscents"></div>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="card-head"><div><h2>Grade × angle</h2>
+      <p>Darker cells hold more. Percentages are of the whole table.</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <div class="seg" id="matrixMetric"></div>
+        <div class="seg" data-toggle="pct" data-target="matrix"></div>
+        <div class="seg" id="matrixView"></div>
+      </div></div>
+    <div id="matrix" class="scroll"></div>
+    <div id="matrix3d" class="plot3d" hidden></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><div><h2>Hold usage</h2>
+      <p>How often each hole on the board is used in each role, across listed, published boulders.
+      Filtering by grade or angle counts a boulder once for each angle it has ascents at.</p></div></div>
+    <div class="ctrl">
+      <label>Grade <select id="bGrade"></select></label>
+      <label>Angle <select id="bAngle"></select></label>
+      <div class="seg" id="bRole"></div>
+      <div class="seg" id="bMode"></div>
+      <label id="bIdsLabel"><input type="checkbox" id="bIds"> Hole IDs</label>
+      <label id="bImgLabel"><input type="checkbox" id="bImg" checked> Board image</label>
+      <div class="seg" id="bView"></div>
+    </div>
+    <div class="board-wrap"><div id="board"></div><div class="scale" id="bScale"></div></div>
+    <div id="board3d" class="plot3d" hidden></div>
+    <p class="sub" id="bNote" style="text-align:center;margin-top:8px"></p>
+    <details><summary>Top 20 holes (table)</summary><div id="bTable"></div></details>
+  </section>
+</main>
+<footer>Previously <a href="https://github.com/gism/KilterNerd">KilterNerd</a></footer>
+<div id="tip"></div>
+
+<script>
+const D = /*__DATA__*/null;
+
+const SVGNS = "http://www.w3.org/2000/svg";
+const RAMP_LIGHT = ["#cde2fb","#b7d3f6","#9ec5f4","#86b6ef","#6da7ec","#5598e7","#3987e5","#2a78d6","#256abf","#1c5cab","#184f95","#104281","#0d366b"];
+const state = { product: 0, pct: {}, matrixMetric: "climbs", role: 0, mode: "count", grade: "all", angle: "all", ids: false, img: true, matrix3d: false, board3d: false };
+const PLOTLY_URL = "https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js";
+
+const nf = new Intl.NumberFormat();
+const fmt = n => nf.format(Math.round(n));
+const fmtPct = (v, d = 1) => v.toFixed(v > 0 && v < 0.1 ? 2 : d) + "%";
+const compact = n => n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e4 ? Math.round(n / 1e3) + "k" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : String(n);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const isDark = () => getComputedStyle(document.documentElement).colorScheme.includes("dark");
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+// Sequential ramp: in dark mode low values recede toward the dark surface.
+function rampColor(t, light = !isDark()) {
+  const r = light ? RAMP_LIGHT : [...RAMP_LIGHT].reverse();
+  const i = Math.min(r.length - 1, Math.max(0, Math.round(t * (r.length - 1))));
+  return { fill: r[i], ink: light ? (i >= 7 ? "#ffffff" : "#0b0b0b") : (i <= 6 ? "#f0efec" : "#0b0b0b") };
+}
+
+function s(tag, attrs = {}, parent) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+const tip = document.getElementById("tip");
+function showTip(ev, html) {
+  tip.innerHTML = html;
+  tip.style.display = "block";
+  const pad = 14, w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = ev.clientX + pad, y = ev.clientY + pad;
+  if (x + w > innerWidth - 8) x = ev.clientX - w - pad;
+  if (y + h > innerHeight - 8) y = ev.clientY - h - pad;
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+const hideTip = () => { tip.style.display = "none"; };
+
+function niceMax(v) {
+  if (v <= 0) return 1;
+  const p = Math.pow(10, Math.floor(Math.log10(v)));
+  for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= v) return m * p;
+  return 10 * p;
+}
+
+function segmented(el, options, current, onChange) {
+  el.innerHTML = "";
+  for (const [value, label] of options) {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = label;
+    b.setAttribute("aria-pressed", String(value === current));
+    b.onclick = () => { onChange(value); segmented(el, options, value, onChange); };
+    el.appendChild(b);
+  }
+}
+
+function dataTable(headers, rows) {
+  return "<table><thead><tr>" + headers.map((h, i) => `<th class="${i ? "n" : ""}">${esc(h)}</th>`).join("") +
+    "</tr></thead><tbody>" + rows.map(r => "<tr>" + r.map((c, i) => `<td class="${i ? "n" : ""}">${esc(c)}</td>`).join("") + "</tr>").join("") +
+    "</tbody></table>";
+}
+
+// ---------- bar chart ----------
+function barChart(el, labels, values, { pct = false, xTitle = "", valueName = "" } = {}) {
+  el.innerHTML = "";
+  const total = values.reduce((a, b) => a + b, 0) || 1;
+  const shown = pct ? values.map(v => 100 * v / total) : values;
+  const W = 520, H = 280, rotate = labels.length > 12;
+  const m = { l: 48, r: 8, t: 18, b: rotate ? 58 : 30 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const max = niceMax(Math.max(...shown, 0));
+  const svg = s("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `${valueName} by ${xTitle}` }, el);
+  for (let i = 0; i <= 4; i++) {
+    const y = m.t + ih - ih * i / 4, v = max * i / 4;
+    s("line", { x1: m.l, x2: W - m.r, y1: y, y2: y, stroke: i ? css("--grid") : css("--axis"), "stroke-width": 1 }, svg);
+    s("text", { x: m.l - 6, y: y + 4, "text-anchor": "end" }, svg).textContent = pct ? v.toFixed(v < 10 && max < 20 ? 1 : 0) + "%" : compact(v);
+  }
+  const band = iw / labels.length, bw = Math.max(1, Math.min(band - 2, band * 0.78));
+  const top = shown.indexOf(Math.max(...shown));
+  labels.forEach((lab, i) => {
+    const v = shown[i], h = ih * v / max, x = m.l + band * i + (band - bw) / 2, y = m.t + ih - h;
+    if (h > 0) {
+      const r = Math.min(4, h, bw / 2);
+      s("path", { d: `M${x},${m.t + ih}V${y + r}Q${x},${y} ${x + r},${y}H${x + bw - r}Q${x + bw},${y} ${x + bw},${y + r}V${m.t + ih}Z`, fill: css("--series-1") }, svg);
+    }
+    const tx = m.l + band * i + band / 2;
+    const t = s("text", rotate ? { x: tx, y: m.t + ih + 12, "text-anchor": "end", transform: `rotate(-50 ${tx} ${m.t + ih + 12})` } : { x: tx, y: m.t + ih + 16, "text-anchor": "middle" }, svg);
+    t.textContent = lab;
+    if (i === top && v > 0) {
+      const l = s("text", { x: tx, y: y - 5, "text-anchor": "middle", style: "fill:var(--ink-2);font-weight:600" }, svg);
+      l.textContent = pct ? fmtPct(v) : compact(values[i]);
+    }
+    const hit = s("rect", { x: m.l + band * i, y: m.t, width: band, height: ih, fill: "transparent" }, svg);
+    hit.addEventListener("mousemove", ev => showTip(ev, `<b>${esc(lab)}</b><br>${esc(valueName)}: ${fmt(values[i])}<br>${fmtPct(100 * values[i] / total, 2)} of total`));
+    hit.addEventListener("mouseleave", hideTip);
+  });
+  const d = document.createElement("details");
+  d.innerHTML = "<summary>Table</summary>" + dataTable([xTitle, valueName, "%"], labels.map((l, i) => [l, fmt(values[i]), fmtPct(100 * values[i] / total, 2)]));
+  el.appendChild(d);
+}
+
+// ---------- growth line chart ----------
+function lineChart(el, months, series) {
+  el.innerHTML = "";
+  if (!months.length) { el.textContent = "No dated boulders."; return; }
+  const legend = document.createElement("div");
+  legend.className = "legend";
+  legend.innerHTML = series.map(sr => `<span><i style="background:${sr.color}"></i>${esc(sr.name)}</span>`).join("");
+  el.appendChild(legend);
+  const W = 1000, H = 300, m = { l: 56, r: 90, t: 12, b: 28 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const max = niceMax(Math.max(...series.flatMap(sr => sr.values)));
+  const X = i => m.l + (months.length === 1 ? iw / 2 : iw * i / (months.length - 1));
+  const Y = v => m.t + ih - ih * v / max;
+  const svg = s("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Cumulative boulders over time" }, el);
+  for (let i = 0; i <= 4; i++) {
+    const y = Y(max * i / 4);
+    s("line", { x1: m.l, x2: m.l + iw, y1: y, y2: y, stroke: i ? css("--grid") : css("--axis") }, svg);
+    s("text", { x: m.l - 6, y: y + 4, "text-anchor": "end" }, svg).textContent = compact(max * i / 4);
+  }
+  months.forEach((mo, i) => {
+    if (mo.endsWith("-01") || months.length < 13) {
+      s("text", { x: X(i), y: H - 8, "text-anchor": "middle" }, svg).textContent = mo.endsWith("-01") ? mo.slice(0, 4) : mo;
+    }
+  });
+  for (const sr of series) {
+    s("path", { d: sr.values.map((v, i) => (i ? "L" : "M") + X(i).toFixed(1) + "," + Y(v).toFixed(1)).join(""), fill: "none", stroke: sr.color, "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+    const last = sr.values.length - 1;
+    s("text", { x: X(last) + 6, y: Y(sr.values[last]) + 4, style: "fill:var(--ink-2)" }, svg).textContent = compact(sr.values[last]);
+  }
+  const cross = s("line", { y1: m.t, y2: m.t + ih, stroke: css("--axis"), visibility: "hidden" }, svg);
+  const dots = series.map(sr => s("circle", { r: 4, fill: sr.color, stroke: css("--surface"), "stroke-width": 2, visibility: "hidden" }, svg));
+  const hit = s("rect", { x: m.l, y: m.t, width: iw, height: ih, fill: "transparent" }, svg);
+  hit.addEventListener("mousemove", ev => {
+    const r = svg.getBoundingClientRect();
+    const px = (ev.clientX - r.left) * W / r.width;
+    const i = Math.max(0, Math.min(months.length - 1, Math.round((px - m.l) / iw * (months.length - 1))));
+    cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i)); cross.setAttribute("visibility", "visible");
+    series.forEach((sr, k) => { dots[k].setAttribute("cx", X(i)); dots[k].setAttribute("cy", Y(sr.values[i])); dots[k].setAttribute("visibility", "visible"); });
+    showTip(ev, `<b>${months[i]}</b><br>` + series.map(sr => `${esc(sr.name)}: ${fmt(sr.values[i])}`).join("<br>"));
+  });
+  hit.addEventListener("mouseleave", () => { hideTip(); cross.setAttribute("visibility", "hidden"); dots.forEach(d => d.setAttribute("visibility", "hidden")); });
+  const d = document.createElement("details");
+  const step = Math.max(1, Math.ceil(months.length / 40));
+  const rows = months.map((mo, i) => [mo, ...series.map(sr => fmt(sr.values[i]))]).filter((_, i) => i % step === 0 || i === months.length - 1);
+  d.innerHTML = "<summary>Table</summary>" + dataTable(["Month", ...series.map(sr => sr.name)], rows);
+  el.appendChild(d);
+}
+
+// ---------- ranked list ----------
+function rankTable(el, ranked, label, valueName, csvHref) {
+  el.innerHTML = "";
+  if (!ranked.rows.length) { el.innerHTML = '<p class="sub">No data.</p>'; return; }
+  let n = 20;
+  const top = ranked.rows[0][1];
+  const draw = () => {
+    const rows = ranked.rows.slice(0, n).map((r, i) =>
+      `<tr><td>${i + 1}</td><td class="barcell" style="--w:${(100 * r[1] / top).toFixed(1)}%"><span>${esc(r[0])}</span></td><td class="n">${fmt(r[1])}</td><td class="n">${r[2].toFixed(2)}%</td></tr>`).join("");
+    el.innerHTML = `<p class="sub">${fmt(ranked.distinct)} distinct · ${fmt(ranked.total)} total</p>` +
+      `<table class="rank"><thead><tr><th>#</th><th>${esc(label)}</th><th class="n">${esc(valueName)}</th><th class="n">%</th></tr></thead><tbody>${rows}</tbody></table>`;
+    const foot = document.createElement("p");
+    foot.className = "sub"; foot.style.marginTop = "8px";
+    if (ranked.rows.length > 20) {
+      const b = document.createElement("button");
+      b.textContent = n === 20 ? `Show top ${ranked.rows.length}` : "Show top 20";
+      b.onclick = () => { n = n === 20 ? ranked.rows.length : 20; draw(); };
+      foot.appendChild(b); foot.append(" ");
+    }
+    const a = document.createElement("a");
+    a.href = csvHref; a.textContent = "Full list (CSV)";
+    foot.appendChild(a);
+    el.appendChild(foot);
+  };
+  draw();
+}
+
+// ---------- grade x angle ----------
+function heatTable(el, rowLabels, colLabels, matrix, pct, valueName) {
+  const total = matrix.flat().reduce((a, b) => a + b, 0) || 1;
+  const max = Math.max(...matrix.flat(), 1);
+  let html = `<table class="heat" aria-label="${esc(valueName)} by grade and angle"><thead><tr><th></th>` + colLabels.map(c => `<th style="text-align:center">${esc(c)}</th>`).join("") + "</tr></thead><tbody>";
+  matrix.forEach((row, r) => {
+    if (!row.some(v => v)) return;
+    html += `<tr><th>${esc(rowLabels[r])}</th>`;
+    row.forEach((v, c) => {
+      if (!v) { html += "<td></td>"; return; }
+      const col = rampColor(Math.sqrt(v / max));
+      const txt = pct ? fmtPct(100 * v / total, 1) : compact(v);
+      html += `<td data-r="${r}" data-c="${c}" style="background:${col.fill};color:${col.ink}">${txt}</td>`;
+    });
+    html += "</tr>";
+  });
+  el.innerHTML = html + "</tbody></table>";
+  el.querySelectorAll("td[data-r]").forEach(td => {
+    const r = +td.dataset.r, c = +td.dataset.c, v = matrix[r][c];
+    td.addEventListener("mousemove", ev => showTip(ev, `<b>${esc(rowLabels[r])} at ${esc(colLabels[c])}</b><br>${esc(valueName)}: ${fmt(v)}<br>${fmtPct(100 * v / total, 2)} of table`));
+    td.addEventListener("mouseleave", hideTip);
+  });
+}
+
+// ---------- board ----------
+function boardValues(P) {
+  const b = P.board, role = state.role, n = b.holes.length;
+  if (state.grade === "all" && state.angle === "all") return b.all[role];
+  const out = new Array(n).fill(0);
+  for (const key in b.ga) {
+    const [g, a] = key.split("|");
+    if ((state.grade === "all" || g === String(state.grade)) && (state.angle === "all" || a === String(state.angle))) {
+      const arr = b.ga[key][role];
+      for (let i = 0; i < n; i++) out[i] += arr[i];
+    }
+  }
+  return out;
+}
+
+function drawBoard(P) {
+  const el = document.getElementById("board");
+  el.innerHTML = "";
+  const holes = P.board.holes;
+  if (!holes.length) { el.innerHTML = '<p class="sub">No hole positions for this board in kilter_sync.db.</p>'; return; }
+  const vals = boardValues(P);
+  const sum = vals.reduce((a, b) => a + b, 0);
+  const max = Math.max(...vals, 0);
+  const xs = holes.map(h => h[1]), ys = holes.map(h => h[2]);
+  const minX = Math.min(...xs) - 6, maxX = Math.max(...xs) + 6, minY = Math.min(...ys) - 6, maxY = Math.max(...ys) + 6;
+  const W = maxX - minX, H = maxY - minY;
+  const X = x => x - minX, Y = y => maxY - y;
+  const roleName = D.roles[state.role];
+  const svg = s("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `${roleName} hold usage on ${P.name}` }, el);
+  const img = state.img && P.board.image;
+  s("rect", { x: 0, y: 0, width: W, height: H, rx: 3, fill: img ? "#ffffff" : css("--page") }, svg);
+  if (img) {
+    // The photo is light, so values over it always use the light ramp (dark = more).
+    s("image", { href: img.src, x: X(img.left), y: Y(img.top), width: img.right - img.left, height: img.top - img.bottom, preserveAspectRatio: "none" }, svg);
+  }
+  const ramp = t => rampColor(t, img ? true : undefined);
+
+  if (state.mode === "heatmap" && max > 0) {
+    const defs = s("defs", {}, svg);
+    const f = s("filter", { id: "blur", x: "-20%", y: "-20%", width: "140%", height: "140%" }, defs);
+    s("feGaussianBlur", { stdDeviation: 3.5 }, f);
+    const g = s("g", { filter: "url(#blur)", opacity: img ? 0.8 : 1 }, svg);
+    holes.forEach((h, i) => {
+      if (!vals[i]) return;
+      const t = vals[i] / max;
+      // Over the white photo the palest steps vanish, so start the ramp a third of the way in.
+      const c = ramp(img ? 0.35 + 0.65 * t : t);
+      // Over the photo, opacity falls to zero with the value so rarely used holds stay clear.
+      const alpha = img ? Math.pow(t, 0.7) : 0.25 + 0.75 * t;
+      s("circle", { cx: X(h[1]), cy: Y(h[2]), r: 5, fill: c.fill, "fill-opacity": alpha.toFixed(2) }, g);
+    });
+  }
+  holes.forEach((h, i) => {
+    const v = vals[i], cx = X(h[1]), cy = Y(h[2]);
+    if (state.mode !== "heatmap" && v > 0) {
+      const c = ramp(Math.sqrt(v / max));
+      s("circle", { cx, cy, r: 2.4, fill: c.fill, "fill-opacity": img ? 0.8 : 1, stroke: img ? "#ffffff" : css("--surface"), "stroke-width": 0.4 }, svg);
+    } else if (!img) {
+      s("circle", { cx, cy, r: 0.9, fill: css("--hole") }, svg);
+    }
+    if (state.ids) {
+      s("text", { x: cx, y: cy - 2.8, "text-anchor": "middle", style: "font-size:2.2px;fill:var(--ink-2)" }, svg).textContent = h[0];
+    }
+    const hit = s("circle", { cx, cy, r: 3, fill: "transparent" }, svg);
+    hit.addEventListener("mousemove", ev => showTip(ev,
+      `<b>Hole ${h[0]}</b> <span class="sub">(${h[1]}, ${h[2]})</span><br>As ${roleName}: ${fmt(v)}` + (sum ? ` · ${fmtPct(100 * v / sum, 2)}` : "")));
+    hit.addEventListener("mouseleave", hideTip);
+  });
+
+  const lo = ramp(0).fill, mid = ramp(0.5).fill, hi = ramp(1).fill;
+  document.getElementById("bImgLabel").hidden = !P.board.image;
+  const valTxt = v => state.mode === "percent" ? fmtPct(sum ? 100 * v / sum : 0, 2) : fmt(v);
+  document.getElementById("bScale").innerHTML = max > 0
+    ? `<span>${state.mode === "heatmap" ? "less" : valTxt(0)}</span><span class="bar" style="background:linear-gradient(90deg,${lo},${mid},${hi})"></span><span>${state.mode === "heatmap" ? "more" : valTxt(max)}</span>`
+    : "";
+  const gLabel = state.grade === "all" ? "all grades" : (P.grades.find(g => g[0] === +state.grade) || [0, state.grade])[1];
+  const aLabel = state.angle === "all" ? "all angles" : D.angles[+state.angle] + "°";
+  document.getElementById("bNote").textContent = sum
+    ? `${fmt(sum)} ${roleName} holds · ${gLabel} · ${aLabel}`
+    : `No ${roleName} holds for ${gLabel} at ${aLabel}.`;
+
+  const order = vals.map((v, i) => [v, i]).filter(p => p[0] > 0).sort((a, b) => b[0] - a[0]).slice(0, 20);
+  document.getElementById("bTable").innerHTML = order.length
+    ? dataTable(["Hole", "x", "y", `As ${roleName}`, "%"], order.map(([v, i]) => [holes[i][0], holes[i][1], holes[i][2], fmt(v), fmtPct(100 * v / sum, 2)]))
+    : '<p class="sub">Nothing to show.</p>';
+  updateBoardView(P, vals);
+}
+
+// ---------- 3D (Plotly, loaded on first use) ----------
+let plotlyPromise = null;
+function loadPlotly() {
+  if (window.Plotly) return Promise.resolve(window.Plotly);
+  return plotlyPromise ||= new Promise((resolve, reject) => {
+    const sc = document.createElement("script");
+    sc.src = PLOTLY_URL;
+    sc.onload = () => resolve(window.Plotly);
+    sc.onerror = () => { plotlyPromise = null; reject(new Error("Could not load Plotly")); };
+    document.head.appendChild(sc);
+  });
+}
+
+function setMsg(el, text) {
+  if (window.Plotly) Plotly.purge(el);
+  el.innerHTML = `<div class="msg">${esc(text)}</div>`;
+}
+
+function show3d(el, on, other) {
+  el.hidden = !on;
+  other.forEach(o => { if (o) o.hidden = on; });
+  if (!on) return null;
+  if (!window.Plotly) setMsg(el, "Loading 3D view…");
+  return loadPlotly()
+    .then(p => { el.querySelectorAll(":scope > .msg").forEach(m => m.remove()); return p; })
+    .catch(() => { setMsg(el, "The 3D view needs an internet connection to load Plotly."); return null; });
+}
+
+function colorscale() {
+  const r = isDark() ? [...RAMP_LIGHT].reverse() : RAMP_LIGHT;
+  return r.map((c, i) => [i / (r.length - 1), c]);
+}
+
+function axis3d(title, extra = {}) {
+  return { title: { text: title }, gridcolor: css("--grid"), zerolinecolor: css("--axis"), linecolor: css("--axis"),
+    showbackground: false, color: css("--muted"), ...extra };
+}
+
+function layout3d(scene) {
+  return { paper_bgcolor: "rgba(0,0,0,0)", margin: { l: 0, r: 0, t: 0, b: 0 },
+    font: { color: css("--ink-2"), family: 'system-ui, -apple-system, "Segoe UI", sans-serif', size: 11 },
+    hoverlabel: { bgcolor: css("--surface"), bordercolor: css("--axis"), font: { color: css("--ink") } },
+    scene: { ...scene, bgcolor: "rgba(0,0,0,0)" } };
+}
+
+// One mesh3d trace holding every box: much faster than a trace per bar.
+function boxesTrace(boxes, max) {
+  const x = [], y = [], z = [], i = [], j = [], k = [], intensity = [], text = [];
+  const F = [[0,1,2],[0,2,3],[4,5,6],[4,6,7],[0,1,5],[0,5,4],[1,2,6],[1,6,5],[2,3,7],[2,7,6],[3,0,4],[3,4,7]];
+  boxes.forEach((b, n) => {
+    const o = n * 8, t = Math.sqrt(b.v / max);
+    for (const zz of [0, b.h]) for (const [xx, yy] of [[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1]]) {
+      x.push(xx); y.push(yy); z.push(zz); intensity.push(t); text.push(b.text);
+    }
+    for (const [a, c, d] of F) { i.push(o + a); j.push(o + c); k.push(o + d); }
+  });
+  return { type: "mesh3d", x, y, z, i, j, k, intensity, cmin: 0, cmax: 1, colorscale: colorscale(), showscale: false,
+    flatshading: true, lighting: { ambient: 0.75, diffuse: 0.6, specular: 0.05 }, hovertext: text, hoverinfo: "text" };
+}
+
+function drawMatrix3D(P) {
+  const el = document.getElementById("matrix3d");
+  const m = P.matrix[state.matrixMetric], pct = state.pct.matrix;
+  const name = state.matrixMetric === "climbs" ? "Boulders" : "Ascents";
+  const total = m.flat().reduce((a, b) => a + b, 0) || 1;
+  const val = v => pct ? 100 * v / total : v;
+  const max = Math.max(...m.flat(), 1);
+  const gl = P.grades.map(g => g[1]);
+  const boxes = [];
+  m.forEach((row, r) => row.forEach((v, c) => {
+    if (!v) return;
+    boxes.push({ x0: c - 0.38, x1: c + 0.38, y0: r - 0.38, y1: r + 0.38, h: val(v), v,
+      text: `${gl[r]} at ${D.angles[c]}°<br>${name}: ${fmt(v)} (${fmtPct(100 * v / total, 2)})` });
+  }));
+  const step = Math.max(1, Math.ceil(gl.length / 12));
+  const yt = gl.map((_, r) => r).filter(r => r % step === 0);
+  Plotly.react(el, [boxesTrace(boxes, max)], layout3d({
+    xaxis: axis3d("Angle", { tickvals: D.angles.map((_, c) => c), ticktext: D.angles.map(a => a + "°") }),
+    yaxis: axis3d("Grade", { tickvals: yt, ticktext: yt.map(r => gl[r]) }),
+    zaxis: axis3d(pct ? name + " (%)" : name),
+    aspectmode: "manual", aspectratio: { x: 1.3, y: 1.6, z: 0.8 },
+    camera: { eye: { x: 1.5, y: -1.7, z: 1.0 } },
+  }), { displaylogo: false, responsive: true });
+}
+
+function gcdAll(nums) {
+  const g = (a, b) => b ? g(b, a % b) : Math.abs(a);
+  return nums.reduce((a, b) => g(a, b), 0) || 4;
+}
+
+function drawBoard3D(P, vals) {
+  const el = document.getElementById("board3d");
+  const holes = P.board.holes;
+  const sum = vals.reduce((a, b) => a + b, 0), max = Math.max(...vals, 0);
+  const roleName = D.roles[state.role];
+  if (!holes.length || !max) { setMsg(el, `No ${roleName} holds for this selection.`); return; }
+  const xs = holes.map(h => h[1]), ys = holes.map(h => h[2]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+  const stepXY = gcdAll([...xs.map(x => x - minX), ...ys.map(y => y - minY)]);
+  const W = maxX - minX || 1, H = maxY - minY || 1;
+  const traces = [];
+  // Every hole as a small dot on the floor, for orientation.
+  traces.push({ type: "scatter3d", mode: "markers", x: xs, y: ys, z: xs.map(() => 0),
+    marker: { size: 1.6, color: css("--hole") }, hoverinfo: "skip" });
+
+  let zTitle;
+  if (state.mode === "heatmap") {
+    // Gaussian-smoothed density surface on the hole grid (KilterNerd's heatmap, as a landscape).
+    const nx = Math.round(W / stepXY) + 1, ny = Math.round(H / stepXY) + 1;
+    let grid = Array.from({ length: ny }, () => new Array(nx).fill(0));
+    holes.forEach((h, i) => { grid[Math.round((h[2] - minY) / stepXY)][Math.round((h[1] - minX) / stepXY)] += vals[i]; });
+    const sigma = 1.5, rad = 4, kern = [];
+    for (let d = -rad; d <= rad; d++) kern.push(Math.exp(-d * d / (2 * sigma * sigma)));
+    const ks = kern.reduce((a, b) => a + b, 0);
+    const blur = (g, horizontal) => g.map((row, yy) => row.map((_, xx) => {
+      let acc = 0;
+      kern.forEach((w, n) => {
+        const d = n - rad;
+        const v = horizontal ? row[xx + d] : (g[yy + d] || [])[xx];
+        if (v) acc += w * v;
+      });
+      return acc / ks;
+    }));
+    grid = blur(blur(grid, true), false);
+    const gmax = Math.max(...grid.flat()) || 1;
+    traces.push({ type: "surface", x: Array.from({ length: nx }, (_, i) => minX + i * stepXY), y: Array.from({ length: ny }, (_, i) => minY + i * stepXY),
+      z: grid.map(r => r.map(v => v / gmax)), colorscale: colorscale(), showscale: false, cmin: 0, cmax: 1,
+      hovertemplate: "x %{x}, y %{y}<br>density %{z:.2f}<extra></extra>",
+      lighting: { ambient: 0.8, diffuse: 0.5, specular: 0.05 }, contours: { z: { show: false } } });
+    zTitle = "Relative density";
+  } else {
+    const pct = state.mode === "percent";
+    const half = stepXY * 0.38, boxes = [];
+    holes.forEach((h, i) => {
+      const v = vals[i];
+      if (!v) return;
+      boxes.push({ x0: h[1] - half, x1: h[1] + half, y0: h[2] - half, y1: h[2] + half, h: pct ? 100 * v / sum : v, v,
+        text: `Hole ${h[0]} (${h[1]}, ${h[2]})<br>As ${roleName}: ${fmt(v)} (${fmtPct(100 * v / sum, 2)})` });
+    });
+    traces.push(boxesTrace(boxes, max));
+    zTitle = pct ? `As ${roleName} (%)` : `As ${roleName}`;
+  }
+  const big = Math.max(W, H);
+  Plotly.react(el, traces, layout3d({
+    xaxis: axis3d("", { showticklabels: false }), yaxis: axis3d("", { showticklabels: false }), zaxis: axis3d(zTitle),
+    aspectmode: "manual", aspectratio: { x: 1.6 * W / big, y: 1.6 * H / big, z: 0.6 },
+    camera: { eye: { x: 0.2, y: -1.9, z: 1.2 } },
+  }), { displaylogo: false, responsive: true });
+}
+
+function updateMatrixView(P) {
+  const ready = show3d(document.getElementById("matrix3d"), state.matrix3d, [document.getElementById("matrix")]);
+  if (ready) ready.then(p => p && drawMatrix3D(P));
+}
+
+function updateBoardView(P, vals) {
+  const el = document.getElementById("board3d");
+  const ready = show3d(el, state.board3d, [document.querySelector(".board-wrap"), document.getElementById("bIdsLabel"), document.getElementById("bImgLabel")]);
+  document.getElementById("bImgLabel").hidden = state.board3d || !P.board.image;
+  if (ready) ready.then(p => p && drawBoard3D(P, vals));
+}
+
+// ---------- page ----------
+function product() { return D.products[state.product]; }
+
+function render() {
+  const P = product();
+  const t = P.totals;
+  document.getElementById("tiles").innerHTML = [
+    ["Boulders", t.climbs], ["Listed boulders", t.listed], ["Boulder × angle with ascents", t.climbAngles],
+    ["Logged ascents", t.ascents], ["Setters", P.setters.distinct],
+  ].map(([k, v]) => `<div class="tile"><div class="v">${fmt(v)}</div><div class="k">${k}</div></div>`).join("");
+
+  lineChart(document.getElementById("growth"), P.growth.months, [
+    { name: "All boulders", values: P.growth.all, color: css("--series-1") },
+    { name: "Listed boulders", values: P.growth.listed, color: css("--series-2") },
+  ]);
+  rankTable(document.getElementById("setters"), P.setters, "Setter", "Boulders", `setters-${P.slug}.csv`);
+  rankTable(document.getElementById("uploaders"), P.uploaders, "User", "Videos", `video-uploaders-${P.slug}.csv`);
+  rankTable(document.getElementById("words"), P.words, "Word", "Count", `name-words-${P.slug}.csv`);
+  rankTable(document.getElementById("emojis"), P.emojis, "Emoji", "Count", `name-emojis-${P.slug}.csv`);
+
+  const gl = P.grades.map(g => g[1]), al = D.angles.map(a => a + "°");
+  barChart(document.getElementById("gradeClimbs"), gl, P.byGrade.climbs, { pct: state.pct.gradeClimbs, xTitle: "Grade", valueName: "Boulders" });
+  barChart(document.getElementById("angleClimbs"), al, P.byAngle.climbs, { pct: state.pct.angleClimbs, xTitle: "Angle", valueName: "Boulders" });
+  barChart(document.getElementById("gradeAscents"), gl, P.byGrade.ascents, { pct: state.pct.gradeAscents, xTitle: "Grade", valueName: "Ascents" });
+  barChart(document.getElementById("angleAscents"), al, P.byAngle.ascents, { pct: state.pct.angleAscents, xTitle: "Angle", valueName: "Ascents" });
+  heatTable(document.getElementById("matrix"), gl, al, P.matrix[state.matrixMetric], state.pct.matrix,
+    state.matrixMetric === "climbs" ? "Boulders" : "Ascents");
+  updateMatrixView(P);
+
+  const gSel = document.getElementById("bGrade");
+  gSel.innerHTML = '<option value="all">All grades</option>' + P.grades.map(g => `<option value="${g[0]}">${esc(g[1])}</option>`).join("");
+  if (![...gSel.options].some(o => o.value === String(state.grade))) state.grade = "all";
+  gSel.value = state.grade;
+  drawBoard(P);
+}
+
+function init() {
+  if (!D) { document.body.innerHTML = "<p style='padding:16px'>No data embedded. Run <code>python kilter_report.py</code>.</p>"; return; }
+  document.getElementById("snapshot").textContent = `Data snapshot ${D.snapshot} · page generated ${D.generated}`;
+  const sel = document.getElementById("product");
+  sel.innerHTML = D.products.map((p, i) => `<option value="${i}">${esc(p.name)} (${fmt(p.totals.climbs)})</option>`).join("");
+  sel.onchange = () => { state.product = +sel.value; render(); };
+
+  document.querySelectorAll('[data-toggle="pct"]').forEach(el => {
+    const key = el.dataset.target;
+    state.pct[key] = false;
+    segmented(el, [[false, "Count"], [true, "%"]], false, v => { state.pct[key] = v; render(); });
+  });
+  segmented(document.getElementById("matrixMetric"), [["climbs", "Boulders"], ["ascents", "Ascents"]], state.matrixMetric, v => { state.matrixMetric = v; render(); });
+  segmented(document.getElementById("bRole"), D.roles.map((r, i) => [i, r[0].toUpperCase() + r.slice(1)]), state.role, v => { state.role = v; drawBoard(product()); });
+  segmented(document.getElementById("bMode"), [["count", "Count"], ["percent", "%"], ["heatmap", "Heatmap"]], state.mode, v => { state.mode = v; drawBoard(product()); });
+  segmented(document.getElementById("matrixView"), [[false, "2D"], [true, "3D"]], state.matrix3d, v => { state.matrix3d = v; updateMatrixView(product()); });
+  segmented(document.getElementById("bView"), [[false, "2D"], [true, "3D"]], state.board3d, v => { state.board3d = v; drawBoard(product()); });
+  const aSel = document.getElementById("bAngle");
+  aSel.innerHTML = '<option value="all">All angles</option>' + D.angles.map((a, i) => `<option value="${i}">${a}°</option>`).join("");
+  aSel.onchange = () => { state.angle = aSel.value; drawBoard(product()); };
+  document.getElementById("bGrade").onchange = e => { state.grade = e.target.value; drawBoard(product()); };
+  document.getElementById("bIds").onchange = e => { state.ids = e.target.checked; drawBoard(product()); };
+  document.getElementById("bImg").onchange = e => { state.img = e.target.checked; drawBoard(product()); };
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
+  render();
+}
+init();
+</script>
+</body>
+</html>
