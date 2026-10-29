@@ -145,30 +145,147 @@ def probe(s):
 def probe_stats(s):
     """Look for a bulk climb_stats endpoint; per-climb calls would be 650k requests."""
     p = "Kilter Board Original"
-    st, sample = page_request(s, p, SCHEMES[0], 0, 3)
-    uuids = [c["climbUuid"] for c in split(sample)[0]]
-    body = {"productName": p, **BOX}
-    page = {**body, "offset": 0, "limit": 3}
+    st, cur = s.get("/climbs/curated")
+    uuids = [c["climbUuid"] for c in cur["climbs"][:3]]  # curated climbs are known to have stats
+    page = {"productName": p, **BOX, "offset": 0, "limit": 3}
     tries = [
         ("GET  climb-stat/{uuid}", lambda: s.get(f"/climb-stat/{uuids[0]}")),
-        ("POST climb-stat/ [uuids]", lambda: s.post("/climb-stat/", uuids)),
-        ("POST climb-stat [uuids]", lambda: s.post("/climb-stat", uuids)),
-        ("POST climb-stat/ {climbUuids}", lambda: s.post("/climb-stat/", {"climbUuids": uuids})),
-        ("POST climb-stat/climbs {climbUuids}", lambda: s.post("/climb-stat/climbs", {"climbUuids": uuids})),
-        ("POST climb-stat/bulk [uuids]", lambda: s.post("/climb-stat/bulk", uuids)),
-        ("POST climb-stat/climbdetails/productName/edges", lambda: s.post("/climb-stat/climbdetails/productName/edges", page)),
-        ("POST climb-stat/productName/edges", lambda: s.post("/climb-stat/productName/edges", page)),
-        ("POST climbs/climbdetails/productName/edges/stats", lambda: s.post(EDGES + "/stats", page)),
-        ("POST climb-stat/ {productName,offset,limit}", lambda: s.post("/climb-stat/", page)),
-        ("GET  climb-stat?productName&offset&limit", lambda: s.get("/climb-stat", {"productName": p, "offset": 0, "limit": 3})),
-        ("GET  climb-stat/?productName&offset&limit", lambda: s.get("/climb-stat/", {"productName": p, "offset": 0, "limit": 3})),
-        ("GET  climb-stat/all?offset&limit", lambda: s.get("/climb-stat/all", {"offset": 0, "limit": 3})),
-        ("GET  climbs/logged", lambda: s.get("/climbs/logged")),
+        ("GET  climb-stat/{a,b,c}", lambda: s.get(f"/climb-stat/{','.join(uuids)}")),
+        ("GET  climb-stat/uuids?uuids=a,b,c", lambda: s.get("/climb-stat/uuids", {"uuids": ",".join(uuids)})),
+        ("POST climb-stat/uuids [uuids]", lambda: s.post("/climb-stat/uuids", uuids)),
+        ("POST climb-stat/by-uuids [uuids]", lambda: s.post("/climb-stat/by-uuids", uuids)),
+        ("POST climbs/climb-stats [uuids]", lambda: s.post("/climbs/climb-stats", uuids)),
+        ("POST edges +angle", lambda: s.post(EDGES, {**page, "angle": 40})),
+        ("POST edges +includeStats", lambda: s.post(EDGES, {**page, "includeStats": True})),
+        ("POST edges +withStats", lambda: s.post(EDGES, {**page, "withStats": True})),
+        ("GET  stats", lambda: s.get("/stats")),
+        ("GET  climbs/stats", lambda: s.get("/climbs/stats")),
+        ("GET  climb-stat/stats", lambda: s.get("/climb-stat/stats")),
+        ("GET  climbs/curated?angle=40", lambda: s.get("/climbs/curated", {"angle": 40})),
+        ("GET  v2/climb-rating", lambda: s.get("/v2/climb-rating")),
+        ("GET  v2/climb-rating/{uuid}", lambda: s.get(f"/v2/climb-rating/{uuids[0]}")),
+        ("GET  climb-rating/{uuid}", lambda: s.get(f"/climb-rating/{uuids[0]}")),
     ]
     for label, call in tries:
         st, r = call()
         text = r if isinstance(r, str) else json.dumps(r)
         print(f"== {label} [{st}]\n   {text[:400]}")
+
+
+def fetch_stats(s, db_path, workers=4, include_unlisted=False):
+    """Per-climb /climb-stat/{uuid} for every climb in db_path. Resumable: done uuids are recorded."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import threading
+
+    db = sqlite3.connect(db_path)
+    db.execute('CREATE TABLE IF NOT EXISTS stats_fetched ("climbUuid" PRIMARY KEY)')
+    where = "" if include_unlisted else 'WHERE c."isListed" = 1 AND c."isDraft" = 0'
+    todo = [u for (u,) in db.execute(
+        f'SELECT c."climbUuid" FROM climbs c {where} '
+        'AND c."climbUuid" NOT IN (SELECT "climbUuid" FROM stats_fetched)'
+        if where else
+        'SELECT "climbUuid" FROM climbs WHERE "climbUuid" NOT IN (SELECT "climbUuid" FROM stats_fetched)')]
+    print(f"{len(todo)} climbs to fetch stats for ({workers} parallel requests)")
+    stats_t = Table(db, "climb_stats", ["climbUuid", "angle"])
+    existing = [r[1] for r in db.execute('PRAGMA table_info("climb_stats")')]
+    stats_t.cols = existing
+
+    lock = threading.Lock()
+
+    def one(uuid):
+        for attempt in range(4):
+            with lock:  # token refresh is not thread-safe
+                if time.time() > s.expires:
+                    s._set(s._token({"grant_type": "refresh_token", "refresh_token": s.refresh}))
+            st, r = s.get(f"/climb-stat/{uuid}", timeout=60)
+            if st == 200:
+                return uuid, r or []
+            time.sleep(2 ** attempt)
+        return uuid, None
+
+    done, rows, t0 = 0, 0, time.time()
+    with ThreadPoolExecutor(workers) as pool:
+        futures = [pool.submit(one, u) for u in todo]
+        for f in as_completed(futures):
+            uuid, stats = f.result()
+            if stats is None:
+                continue  # leave unrecorded; a rerun retries it
+            stats_t.add(stats)
+            db.execute('INSERT OR IGNORE INTO stats_fetched VALUES (?)', (uuid,))
+            done += 1
+            rows += len(stats)
+            if done % 500 == 0:
+                db.commit()
+                rate = done / (time.time() - t0)
+                eta = (len(todo) - done) / rate / 60
+                print(f"  {done}/{len(todo)} climbs, {rows} stat rows, {rate:.1f}/s, ~{eta:.0f} min left", end="\r")
+    db.commit()
+    print(f"\nDone: {done} climbs, {rows} stat rows into {db_path}")
+
+
+SYNC_URL ="https://sync1.kiltergrips.com/sync/stream"
+
+
+def sync(s, out_path):
+    """Stream the app's PowerSync buckets (the source of its local climbs/climb_stats tables).
+
+    Protocol: POST /sync/stream, NDJSON response of checkpoint / data / checkpoint_complete lines.
+    Each data op carries object_type (table name), object_id and data (JSON string).
+    """
+    import uuid as uuidlib
+    body = {"buckets": [], "include_checksum": True, "raw_data": True,
+            "client_id": str(uuidlib.uuid4()), "parameters": {}}
+    req = urllib.request.Request(SYNC_URL, data=json.dumps(body).encode(), method="POST", headers={
+        "Authorization": f"Token {s.access}",
+        "Content-Type": "application/json",
+        "Accept": "application/x-ndjson",
+        "User-Agent": "powersync-dart-core/1.0",
+    })
+    try:
+        resp = urllib.request.urlopen(req, timeout=300)
+    except urllib.error.HTTPError as e:
+        sys.exit(f"Sync refused [{e.code}]: {e.read()[:500].decode(errors='replace')}")
+
+    db = sqlite3.connect(out_path)
+    tables, counts, removed = {}, {}, 0
+    last_print = 0
+    with resp:
+        for raw in resp:
+            line = raw.strip()
+            if not line:
+                continue
+            msg = json.loads(line)
+            if "checkpoint" in msg:
+                buckets = msg["checkpoint"].get("buckets", [])
+                print(f"checkpoint: {len(buckets)} buckets "
+                      f"{[b.get('bucket') for b in buckets][:10]}")
+            elif "data" in msg:
+                for op in msg["data"].get("data", []):
+                    t, oid = op.get("object_type"), op.get("object_id")
+                    if op.get("op") == "PUT" and t:
+                        row = json.loads(op["data"]) if isinstance(op.get("data"), str) else (op.get("data") or {})
+                        row = {"id": oid, **row}
+                        if t not in tables:
+                            tables[t] = Table(db, t, ["id"])
+                        tables[t].add([row])
+                        counts[t] = counts.get(t, 0) + 1
+                    elif op.get("op") == "REMOVE":
+                        removed += 1
+                if sum(counts.values()) - last_print >= 20000:
+                    last_print = sum(counts.values())
+                    db.commit()
+                    print("  " + ", ".join(f"{k}={v}" for k, v in counts.items()), end="\r")
+            elif "checkpoint_complete" in msg:
+                print("\ncheckpoint complete")
+                break
+            elif "token_expires_in" in msg:
+                if msg["token_expires_in"] <= 0:
+                    sys.exit("Sync server says the token is expired/invalid for PowerSync.")
+            else:
+                print("other message:", json.dumps(msg)[:300])
+    db.commit()
+    print(f"rows: {counts}  (REMOVE ops skipped: {removed})")
+    print(f"Saved {out_path}")
 
 
 class Table:
@@ -281,6 +398,10 @@ if __name__ == "__main__":
     session = Session()
     if mode == "probe":
         probe(session)
+    elif mode == "stats":
+        fetch_stats(session, out or "kilter.db", include_unlisted="--all" in sys.argv)
+    elif mode == "sync":
+        sync(session, out or "kilter_sync.db")
     elif mode == "stats-probe":
         probe_stats(session)
     elif mode == "curated":
