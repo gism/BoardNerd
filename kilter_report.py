@@ -1,7 +1,8 @@
-"""Build a static KilterNerd-style report page from the databases kilter_dump.py produces.
+"""Build a static KilterNerd-style report page from the databases kilter_dump.py and
+moon_load_dumps.py produce.
 
 Usage:
-    python kilter_report.py [--climbs kilter.db] [--sync kilter_sync.db] [--out docs]
+    python kilter_report.py [--climbs kilter.db] [--sync kilter_sync.db] [--moon moon.db] [--out docs]
 
 Writes <out>/index.html (self-contained: data is embedded, charts render in the browser)
 plus full-length CSV lists. Only the Python standard library is used.
@@ -9,6 +10,9 @@ plus full-length CSV lists. Only the Python standard library is used.
 Inputs:
     kilter.db       climbs + climb_stats   (python kilter_dump.py dump / stats)
     kilter_sync.db  holes, roles, grades, beta links   (python kilter_dump.py sync)
+    moon.db         MoonBoard problems, optional   (python moon_load_dumps.py) - skipped
+                    with a message if the file doesn't exist, so kilter_report.py still
+                    works standalone without it.
 """
 import argparse
 import base64
@@ -20,6 +24,8 @@ import os
 import re
 import sqlite3
 import unicodedata
+
+import moon_report
 
 HOLD_RE = re.compile(r"h(\d+)p(\d+)")
 ROLES = ["start", "hand", "finish", "foot"]
@@ -262,6 +268,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--climbs", default="kilter.db")
     ap.add_argument("--sync", default="kilter_sync.db")
+    ap.add_argument("--moon", default="moon.db")
     ap.add_argument("--out", default="docs")
     args = ap.parse_args()
 
@@ -272,13 +279,23 @@ def main():
     present = [p for (p,) in climbs_db.execute(
         "SELECT productName FROM climbs GROUP BY productName ORDER BY COUNT(*) DESC") if p]
     products = [p for p in PRODUCTS if p in present] + [p for p in present if p not in PRODUCTS]
+    kilter_products = [build_product(p, climbs_db, grades, role_of_code, holes.get(p, []), beta, args.out)
+                        for p in products]
+
+    moon_products = []
+    if os.path.exists(args.moon):
+        moon_db = moon_report.connect_ro(args.moon)
+        moon_products = [moon_report.build_board(b, moon_db, ANGLES, args.out)
+                          for b in moon_report.boards_present(moon_db)]
+    else:
+        print(f"{args.moon} not found, skipping MoonBoard boards")
+
     data = {
         "generated": datetime.date.today().isoformat(),
         "snapshot": datetime.date.fromtimestamp(os.path.getmtime(args.climbs)).isoformat(),
         "angles": ANGLES,
         "roles": ROLES,
-        "products": [build_product(p, climbs_db, grades, role_of_code, holes.get(p, []), beta, args.out)
-                     for p in products],
+        "products": kilter_products + moon_products,
     }
 
     template_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "report_template.html")

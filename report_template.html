@@ -465,7 +465,7 @@ function drawBoard(P) {
   const el = document.getElementById("board");
   el.innerHTML = "";
   const holes = P.board.holes;
-  if (!holes.length) { el.innerHTML = '<p class="sub">No hole positions for this board in kilter_sync.db.</p>'; return; }
+  if (!holes.length) { el.innerHTML = '<p class="sub">No hole positions for this board yet.</p>'; return; }
   const vals = boardValues(P);
   const sum = vals.reduce((a, b) => a + b, 0);
   const max = Math.max(...vals, 0);
