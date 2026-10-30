@@ -153,14 +153,19 @@ footer { padding-bottom: 40px; color: var(--muted); font-size: 13px; }
 
   <div class="grid2">
     <section class="card">
-      <h2>Top setters</h2><p>Boulders set per user, all boulders on this board.</p>
+      <h2>Top setters by boulders set</h2><p>Boulders set per user, all boulders on this board.</p>
       <div id="setters"></div>
     </section>
     <section class="card">
-      <h2>Top beta video uploaders</h2><p>Beta videos linked to boulders on this board.</p>
-      <div id="uploaders"></div>
+      <h2>Top setters by ascents</h2><p>Logged ascents of each user's boulders, summed over all angles.</p>
+      <div id="setters-asc"></div>
     </section>
   </div>
+
+  <section class="card">
+    <h2>Top beta video uploaders</h2><p>Beta videos linked to boulders on this board.</p>
+    <div id="uploaders"></div>
+  </section>
 
   <div class="grid2">
     <section class="card">
@@ -707,6 +712,7 @@ function render() {
     { name: "Listed boulders", values: P.growth.listed, color: css("--series-2") },
   ]);
   rankTable(document.getElementById("setters"), P.setters, "Setter", "Boulders", `setters-${P.slug}.csv`);
+  rankTable(document.getElementById("setters-asc"), P.settersByAscents, "Setter", "Ascents", `setters-by-ascents-${P.slug}.csv`);
   rankTable(document.getElementById("uploaders"), P.uploaders, "User", "Videos", `video-uploaders-${P.slug}.csv`);
   rankTable(document.getElementById("words"), P.words, "Word", "Count", `name-words-${P.slug}.csv`);
   rankTable(document.getElementById("emojis"), P.emojis, "Emoji", "Count", `name-emojis-${P.slug}.csv`);

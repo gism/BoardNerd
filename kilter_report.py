@@ -140,6 +140,8 @@ def build_product(product, climbs_db, grades, role_of_code, product_holes, beta,
     growth = collections.Counter()
     growth_listed = collections.Counter()
     setters = collections.Counter()
+    setter_asc = collections.Counter()  # logged ascents on each setter's boulders, all angles
+    setter_of = {}
     uploaders = collections.Counter()
     words = collections.Counter()
     emojis = collections.Counter()
@@ -156,6 +158,7 @@ def build_product(product, climbs_db, grades, role_of_code, product_holes, beta,
         if month:
             growth[month] += 1
         setters[user or "(unknown)"] += 1
+        setter_of[uuid] = user or "(unknown)"
         for u in beta.get(uuid, ()):
             uploaders[u] += 1
         w, e = name_tokens(name)
@@ -195,6 +198,7 @@ def build_product(product, climbs_db, grades, role_of_code, product_holes, beta,
             continue
         n_stats += 1
         total_asc += asc
+        setter_asc[setter_of[uuid]] += asc
         by_grade_n[grade] += 1
         by_grade_asc[grade] += asc
         by_angle_n[angle] += 1
@@ -216,6 +220,7 @@ def build_product(product, climbs_db, grades, role_of_code, product_holes, beta,
 
     base = slug(product)
     write_csv(os.path.join(out_dir, f"setters-{base}.csv"), ["setter", "climbs"], setters)
+    write_csv(os.path.join(out_dir, f"setters-by-ascents-{base}.csv"), ["setter", "ascents"], setter_asc)
     write_csv(os.path.join(out_dir, f"video-uploaders-{base}.csv"), ["user", "videos"], uploaders)
     write_csv(os.path.join(out_dir, f"name-words-{base}.csv"), ["word", "count"], words)
     write_csv(os.path.join(out_dir, f"name-emojis-{base}.csv"), ["emoji", "count"], emojis)
@@ -234,6 +239,7 @@ def build_product(product, climbs_db, grades, role_of_code, product_holes, beta,
         "totals": {"climbs": n_climbs, "listed": n_listed, "climbAngles": n_stats, "ascents": total_asc},
         "growth": {"months": months, "all": cum_all, "listed": cum_listed},
         "setters": ranked(setters),
+        "settersByAscents": ranked(setter_asc),
         "uploaders": ranked(uploaders),
         "words": ranked(words),
         "emojis": ranked(emojis, 50),
