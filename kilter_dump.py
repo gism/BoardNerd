@@ -22,6 +22,7 @@ import urllib.request
 API = "https://portal.kiltergrips.com/api"
 TOKEN_URL = "https://idp.kiltergrips.com/realms/kilter/protocol/openid-connect/token"
 EDGES = "/climbs/climbdetails/productName/edges"
+# Every board the catalogue endpoint serves (counts in API.md).
 PRODUCTS = ["Kilter Board Original", "Kilter Board Homewall", "JUUL", "Spire", "UP Board"]
 BOX = {"edgeLeft": -1000, "edgeRight": 1000, "edgeBottom": -1000, "edgeTop": 1000}
 PAGE_SIZE = 5000
@@ -179,12 +180,11 @@ def fetch_stats(s, db_path, workers=4, include_unlisted=False):
 
     db = sqlite3.connect(db_path)
     db.execute('CREATE TABLE IF NOT EXISTS stats_fetched ("climbUuid" PRIMARY KEY)')
-    where = "" if include_unlisted else 'WHERE c."isListed" = 1 AND c."isDraft" = 0'
+    marks = ", ".join("?" * len(PRODUCTS))
+    listed = "" if include_unlisted else 'AND c."isListed" = 1 AND c."isDraft" = 0 '
     todo = [u for (u,) in db.execute(
-        f'SELECT c."climbUuid" FROM climbs c {where} '
-        'AND c."climbUuid" NOT IN (SELECT "climbUuid" FROM stats_fetched)'
-        if where else
-        'SELECT "climbUuid" FROM climbs WHERE "climbUuid" NOT IN (SELECT "climbUuid" FROM stats_fetched)')]
+        f'SELECT c."climbUuid" FROM climbs c WHERE c."productName" IN ({marks}) {listed}'
+        'AND c."climbUuid" NOT IN (SELECT "climbUuid" FROM stats_fetched)', PRODUCTS)]
     print(f"{len(todo)} climbs to fetch stats for ({workers} parallel requests)")
     stats_t = Table(db, "climb_stats", ["climbUuid", "angle"])
     existing = [r[1] for r in db.execute('PRAGMA table_info("climb_stats")')]

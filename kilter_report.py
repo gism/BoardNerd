@@ -25,8 +25,15 @@ HOLD_RE = re.compile(r"h(\d+)p(\d+)")
 ROLES = ["start", "hand", "finish", "foot"]
 # placement_types.placement_type -> report role. Colour-only types (cyan, red, ...) are ignored.
 ROLE_OF_TYPE = {"start": 0, "middle": 1, "finish": 2, "foot": 3}
+# Per-layout role codes from the Aurora era (as used in KilterNerd), e.g. 42-45 on the Homewall.
+# Only codes that don't clash with the new app's placement_types; those take precedence.
+LEGACY_ROLE_CODES = {c: r for r, codes in enumerate([
+    (20, 24, 28, 32, 42), (21, 25, 29, 33, 43), (22, 26, 30, 34, 44), (23, 27, 31, 35, 45),
+]) for c in codes}
 ANGLES = list(range(0, 75, 5))
 TOP_N = 100
+# Board order in the report's picker; any other board found in kilter.db is appended after these.
+PRODUCTS = ["Kilter Board Original", "Kilter Board Homewall", "JUUL", "Spire", "UP Board"]
 
 # Board photos drawn under the hold-usage chart, with the hole-coordinate box the image covers
 # (left, right, bottom, top). The Original image is KilterNerd's img.png: the 16x12 Super Wide
@@ -98,8 +105,9 @@ def load_reference(sync):
     # Only grades the app lists (4A/V0 and up); lower ids appear as placeholders on ungraded stats.
     grades = {gid: label for gid, label in sync.execute(
         "SELECT difficulty_grade_id, boulder_difficulty FROM difficulty_grades WHERE is_listed = 1")}
-    role_of_code = {code: ROLE_OF_TYPE[t] for t, code in sync.execute(
-        "SELECT placement_type, short_ref FROM placement_types") if t in ROLE_OF_TYPE}
+    role_of_code = dict(LEGACY_ROLE_CODES)
+    role_of_code.update({code: ROLE_OF_TYPE[t] for t, code in sync.execute(
+        "SELECT placement_type, short_ref FROM placement_types") if t in ROLE_OF_TYPE})
     holes = collections.defaultdict(list)
     for hid, product, x, y in sync.execute("SELECT mounting_hole_uuid, product_name, x, y FROM mounting_holes"):
         holes[product].append((int(hid), x, y))
@@ -136,6 +144,7 @@ def build_product(product, climbs_db, grades, role_of_code, product_holes, beta,
     words = collections.Counter()
     emojis = collections.Counter()
     holds_of = {}  # listed climbs only: uuid -> [(hole_idx, role)]
+    skipped = collections.Counter()  # holds left off the board chart, by reason
     hold_all = [[0] * n_holes for _ in ROLES]
     n_climbs = n_listed = 0
 
@@ -159,11 +168,17 @@ def build_product(product, climbs_db, grades, role_of_code, product_holes, beta,
             holds = []
             for h, p in HOLD_RE.findall(concat or ""):
                 idx, role = hole_index.get(int(h)), role_of_code.get(int(p))
-                if idx is not None and role is not None:
+                if idx is None:
+                    skipped["unknown hole"] += 1
+                elif role is None:
+                    skipped[f"role code {p}"] += 1
+                else:
                     holds.append((idx, role))
                     hold_all[role][idx] += 1
             holds_of[uuid] = holds
 
+    if skipped:
+        print(f"{product}: holds left off the board chart: {dict(skipped.most_common(8))}")
     print(f"{product}: reading stats")
     angle_idx = {a: i for i, a in enumerate(ANGLES)}
     by_grade_n, by_grade_asc = collections.Counter(), collections.Counter()
@@ -248,8 +263,9 @@ def main():
     climbs_db, sync = connect_ro(args.climbs), connect_ro(args.sync)
     grades, role_of_code, holes, beta = load_reference(sync)
 
-    products = [p for (p,) in climbs_db.execute(
-        "SELECT productName FROM climbs GROUP BY productName ORDER BY COUNT(*) DESC")]
+    present = [p for (p,) in climbs_db.execute(
+        "SELECT productName FROM climbs GROUP BY productName ORDER BY COUNT(*) DESC") if p]
+    products = [p for p in PRODUCTS if p in present] + [p for p in present if p not in PRODUCTS]
     data = {
         "generated": datetime.date.today().isoformat(),
         "snapshot": datetime.date.fromtimestamp(os.path.getmtime(args.climbs)).isoformat(),

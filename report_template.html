@@ -733,6 +733,7 @@ function init() {
   const sel = document.getElementById("product");
   sel.innerHTML = D.products.map((p, i) => `<option value="${i}">${esc(p.name)} (${fmt(p.totals.climbs)})</option>`).join("");
   sel.onchange = () => { state.product = +sel.value; render(); };
+  document.querySelector(".filters").hidden = D.products.length < 2;
 
   document.querySelectorAll('[data-toggle="pct"]').forEach(el => {
     const key = el.dataset.target;
